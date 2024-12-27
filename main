@@ -1,0 +1,74 @@
+from telethon import TelegramClient, events, sync
+import re
+import logging
+
+# Logging setup
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
+
+logger = logging.getLogger(__name__)
+
+# Replace these with your actual API credentials
+api_id = 'your_api_id'
+api_hash = 'your_api_hash'
+
+# Group IDs categorized by region — replace with real IDs
+malaysia_groups = ['malaysia_group_id_1', 'malaysia_group_id_2', 'malaysia_group_id_3']
+vietnam_groups = ['vietnam_group_id_1', 'vietnam_group_id_2', 'vietnam_group_id_3']
+
+# Group links — replace placeholders with actual links
+group_links = {
+    # Malaysia groups
+    'malaysia_group_id_1': 'https://example.com/malaysia_group_1',
+    'malaysia_group_id_2': 'https://example.com/malaysia_group_2',
+    'malaysia_group_id_3': 'https://example.com/malaysia_group_3',
+    # Vietnam groups
+    'vietnam_group_id_1': 'https://example.com/vietnam_group_1',
+    'vietnam_group_id_2': 'https://example.com/vietnam_group_2',
+    'vietnam_group_id_3': 'https://example.com/vietnam_group_3',
+}
+
+# Chat IDs where the bot will forward messages — replace placeholders
+malaysia_chat = 'malaysia_alert_chat_id'  # Chat ID for Malaysia messages
+vietnam_chat = 'vietnam_alert_chat_id'   # Chat ID for Vietnam messages
+
+# Keywords to monitor in messages
+keywords = ['shisha', 'hookah', 'instructor', 'motorcycle']  # English examples
+pattern = re.compile(r"(?i)(" + "|".join(map(re.escape, keywords)) + ")")
+
+# Initialize the Telegram client
+client = TelegramClient('anon', api_id, api_hash)
+
+@client.on(events.NewMessage(chats=malaysia_groups + vietnam_groups))
+async def handler(event):
+    # Log the new message text
+    logger.info(f"Received message: {event.text}")
+    original_message = event.message  # Store the original message
+    try:
+        # Check if the message contains any defined keywords
+        if pattern.search(event.text):
+            chat_id = event.chat_id
+            chat_title = getattr(await event.get_chat(), 'title', None)  # Get the group title
+            chat_link = group_links.get(chat_id, "Link not available")  # Find the group link
+
+            # Build the notification message
+            notification_message = f"Message found in group: {chat_title}\nLink: {chat_link}"
+
+            # Determine where to forward the message based on its category
+            recipient_chat = malaysia_chat if chat_id in malaysia_groups else vietnam_chat
+
+            # Send a notification and forward the original message
+            await client.send_message(recipient_chat, notification_message)
+            await client.forward_messages(recipient_chat, original_message)
+            logger.info(f"Message '{event.text}' from group {chat_id} ({chat_title}) forwarded to chat {recipient_chat}")
+    except Exception as e:
+        # Log any errors that occur
+        logger.error(f"Error while processing message: {e}", exc_info=True)
+
+# Bot's main loop
+async def main():
+    await client.start()
+    logger.info("Bot started and monitoring groups!")
+    await client.run_until_disconnected()
+
+client.loop.run_until_complete(main())
